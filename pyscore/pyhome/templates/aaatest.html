@@ -1,0 +1,265 @@
+<!doctype html>
+<html style="height: 100%; width: 100%;">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title></title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz"
+        crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"
+        integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.8.4/moment.min.js"></script>
+    <script src="https://cdn.datatables.net/plug-ins/1.13.6/sorting/datetime-moment.js"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
+    <style>
+        #my-spinner {
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            display: none;
+            opacity: .6;
+            background: silver;
+            position: fixed;
+        }
+
+        #my-spinner div {
+            width: 100%;
+            height: 100%;
+            display: table;
+        }
+
+        #my-spinner span {
+            display: table-cell;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        #my-spinner img {
+            background: white;
+            padding: 1em;
+            border-radius: .7em;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Gamelist 내역</h1>
+    <hr>
+    <center class="row">
+        <div class="col-1"></div>
+        <div class="col-9">
+            <form id="range">
+                <div class="row">
+                    <div class="col">
+                        <h3 class="my-2">날짜</h3>
+                    </div>
+                    <div class="col my-2">
+                        <input type="month" name="start" id="start" class="form-control">
+                    </div>
+                    <div class="col">
+                        <h3 class="my-2"> ~ </h3>
+                    </div>
+                    <div class="col my-2">
+                        <input type="month" name="end" id="end" class="form-control">
+                    </div>
+                    <div class="col my-2">
+                        <button type="button" id="btn-load-data" class="btn btn-primary">조회</button>
+                    </div>
+                    <div class="col-5"></div>
+                    <div class="col-2 mt-1">
+                        <div id="totalCoupon">
+                            총 쿠폰 합산 : 0
+                        </div>
+                        <div id="totalCount">
+                            총 인원 합산 : 0
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <hr>
+
+            <table id="myTable" class="display" style="cursor:pointer">
+                <thead>
+                    <tr>
+                        <th>횟수</th>
+                        <th>날짜</th>
+                        <th>파트</th>
+                        <th>메모</th>
+                        <th>쿠폰합산</th>
+                        <th>인원</th>
+                        <th>이름</th>
+                    </tr>
+                </thead>
+            </table>
+        </div>
+        <div class="col-1"></div>
+    </center>
+    <div id='my-spinner'>
+        <div><span>
+                <img src='https://cdnjs.cloudflare.com/ajax/libs/galleriffic/2.0.1/css/loader.gif'>
+            </span></div>
+    </div>
+    <script>
+        $(document).ready(function () {
+            let searchParams = new URLSearchParams(window.location.search);
+            var today = new Date();
+            var year = today.getFullYear();
+            var month = today.getMonth() + 1;
+            month = month < 10 ? '0' + month : month;
+            var today = `${year}-${month}`;
+            var regex = RegExp(/^\d{4}-(0[1-9]|1[012])$/);
+            var start = searchParams.get('start');
+            if (!start || !regex.test(start)) {
+                start = today;
+            }
+            $('#start').val(start);
+            var end = searchParams.get('end');
+            if (!end || !regex.test(end)) {
+                end = today;
+            }
+            $('#end').val(end);
+            var search = searchParams.get('search');
+            search = search ? search : '';
+            var page = searchParams.get('page');
+            page = page ? page : 0;
+            var order = searchParams.get('order');
+            order = order ? order : 0;
+            var reverse = searchParams.get('reverse');
+            reverse = reverse ? 'desc' : 'asc'
+            $.fn.dataTable.moment('MM D, YYYY');
+            $.fn.dataTable.moment('YY년M월D일');
+            DataTable.Api.register('column().data().sum()', function () {
+                try {
+                    return this.reduce(function (a, b) {
+                        let x = parseFloat(a) || 0;
+                        let y = parseFloat(b) || 0;
+                        return x + y;
+                    });
+                } catch {
+                    return 0;
+                }
+            });
+            var table = $('#myTable').DataTable({});
+            table.on('click', 'tbody tr', function () {
+                let data = table.row(this).data();
+
+                if (start != today) {
+                    searchParams.set('start', start);
+                }
+                if (end != today) {
+                    searchParams.set('end', end);
+                }
+                var state = table.state();
+                if (state.search.search) {
+                    searchParams.set('search', state.search.search);
+                }
+                if (state.order[0][0]) {
+                    searchParams.set('order', state.order[0][0]);
+                }
+                if (state.order[0][1] != 'asc') {
+                    searchParams.set('reverse', 'desc');
+                }
+                if (table.page()) {
+                    searchParams.set('page', table.page());
+                }
+
+                history.pushState(null, null, `?${searchParams.toString()}`);
+
+                location.href = `${window.location.pathname}/${data.id}`
+                // location.href = `gamelist/${data.id}`
+            });
+            table.on('hover', 'tbody tr', function () {
+                $(this).css('cursor', 'pointer');
+            });
+
+            $(document)
+                .ajaxStart(function () {
+                    $('#my-spinner').show();
+
+                })
+                .ajaxStop(function () {
+                    $('#my-spinner').hide();
+                    $("#totalCoupon").html(`총 쿠폰 합산 : ${table.column(3).data().sum()}`);
+                    $("#totalCount").html(`총 인원 합산 : ${table.column(4).data().sum()}`);
+                });
+
+            $(function () {
+                $('#btn-load-data').click(function () {
+                    if ($("#start").val() != start) {
+                        start = $("#start").val();
+                        searchParams.set('start', start);
+                    }
+                    if ($("#end").val() != end) {
+                        end = $("#end").val();
+                        searchParams.set('end', end);
+                    }
+                    searchParams.delete('search');
+                    searchParams.delete('order');
+                    searchParams.delete('reverse');
+                    searchParams.delete('page');
+                    history.pushState(null, null, `?${searchParams.toString()}`);
+
+                    search = '';
+                    order = 0;
+                    reverse = 'asc';
+                    page = 0;
+
+                    getData();
+                });
+            });
+            function getData() {
+                $.ajax({
+                    url: "{% url 'gamelist_data' %}",
+                    data: $("#range").serialize(),
+                    success: function (data) {
+                        table.destroy();
+                        table = $("#myTable").DataTable({
+                            data: data.data,
+                            columns: [
+                                {
+                                    data: 'id',
+                                    render: function (data, type, row, meta) {
+                                        return meta.row + meta.settings._iDisplayStart + 1;
+                                    }
+                                },
+                                {
+                                    data: 'gamedate',
+                                    render: function (data, type, row) {
+                                        return moment(new Date(data).toString()).format('MM-DD');
+                                    }
+                                },
+                                { data: 'part' },
+                                { data: 'gamememo' },
+                                { data: 'coupon' },
+                                { data: 'count' },
+                                { data: 'names' },
+                            ],
+                            columnDefs: [
+                                {
+                                    target: 5,
+                                    visible: false,
+                                },
+                            ],
+                            order: [[order, reverse]]
+                        });
+                        if (search) {
+                            table.search(search).draw();
+                        }
+                        if (page) {
+                            table.page(parseInt(page)).draw(false);
+                        }
+                    }
+                });
+            }
+            getData();
+        });
+
+    </script>
+</body>
